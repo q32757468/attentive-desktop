@@ -14,12 +14,13 @@ use std::{
     net::{IpAddr, Ipv4Addr, UdpSocket},
     path::{Path, PathBuf},
     pin::Pin,
-    process::Command,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, RwLock,
     },
 };
+#[cfg(windows)]
+use std::process::Command;
 use tauri::{async_runtime::JoinHandle, AppHandle, Manager, State as TauriState};
 #[cfg(desktop)]
 use tauri::{
@@ -36,6 +37,7 @@ const DEFAULT_NOTIFIER_HOST: &str = "0.0.0.0";
 const DEFAULT_NOTIFIER_PORT: u16 = 8765;
 const DEFAULT_MAX_BODY_BYTES: usize = 1024 * 1024;
 const MAX_OPEN_URI_LENGTH: usize = 4096;
+#[cfg(windows)]
 const APP_USER_MODEL_ID: &str = "Attentive.Desktop";
 const APP_DISPLAY_NAME: &str = "Attentive Desktop";
 
@@ -118,15 +120,19 @@ struct HttpState {
 
 #[derive(Debug, Clone)]
 struct NotificationRequest {
+    #[cfg_attr(not(windows), allow(dead_code))]
     title: String,
+    #[cfg_attr(not(windows), allow(dead_code))]
     body: String,
     source: Option<String>,
+    #[cfg_attr(not(windows), allow(dead_code))]
     action: Option<OpenUriAction>,
     _metadata: Option<Map<String, Value>>,
 }
 
 #[derive(Debug, Clone)]
 struct OpenUriAction {
+    #[cfg_attr(not(windows), allow(dead_code))]
     uri: String,
 }
 
