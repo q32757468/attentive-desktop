@@ -1,0 +1,10 @@
+{
+  "name": "attentive-desktop",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+    "source=attentive-desktop-node_modules,target=/workspaces/${localWorkspaceFolderBasename}/node_modules,type=volume"
+  ]
+}

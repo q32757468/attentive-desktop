@@ -6,3 +6,4 @@ src-tauri/gen/
 .cargo-target-build/
 *.log
 .DS_Store
+.pnpm-store
