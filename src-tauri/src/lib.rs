@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::{
     future::Future,
+    net::{IpAddr, Ipv4Addr, UdpSocket},
     path::{Path, PathBuf},
     pin::Pin,
     process::Command,
@@ -20,6 +21,12 @@ use std::{
     },
 };
 use tauri::{async_runtime::JoinHandle, AppHandle, Manager, State as TauriState};
+#[cfg(desktop)]
+use tauri::{
+    menu::{MenuBuilder, MenuItemBuilder},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    WindowEvent,
+};
 use tokio::{net::TcpListener, sync::Mutex};
 use uuid::Uuid;
 
@@ -63,16 +70,19 @@ pub struct ServerStatus {
     pub host: String,
     pub port: u16,
     pub endpoint: String,
+    pub lan_endpoint: Option<String>,
     pub last_error: Option<String>,
 }
 
 impl ServerStatus {
     fn offline(config: &AppConfig, last_error: Option<String>) -> Self {
+        let endpoint = local_endpoint(&config.host, config.port);
         Self {
             running: false,
             host: config.host.clone(),
             port: config.port,
-            endpoint: local_endpoint(&config.host, config.port),
+            lan_endpoint: lan_endpoint(&config.host, config.port, &endpoint),
+            endpoint,
             last_error,
         }
     }
@@ -214,10 +224,7 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            show_main_window(app);
         }));
         builder = builder.plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -226,6 +233,12 @@ pub fn run() {
     }
 
     builder
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             get_settings,
             save_settings,
@@ -272,6 +285,41 @@ pub fn run() {
             });
             app.manage(state.clone());
 
+            #[cfg(desktop)]
+            {
+                let show_item = MenuItemBuilder::with_id("show", "显示窗口").build(app)?;
+                let quit_item =
+                    MenuItemBuilder::with_id("quit", "退出 Attentive Desktop").build(app)?;
+                let menu = MenuBuilder::new(app)
+                    .items(&[&show_item, &quit_item])
+                    .build()?;
+                let mut tray_builder = TrayIconBuilder::new()
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .tooltip("Attentive Desktop · 通知服务")
+                    .on_menu_event(|app, event| {
+                        if event.id() == "show" {
+                            show_main_window(app);
+                        } else if event.id() == "quit" {
+                            app.exit(0);
+                        }
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            show_main_window(tray.app_handle());
+                        }
+                    });
+                if let Some(icon) = app.default_window_icon().cloned() {
+                    tray_builder = tray_builder.icon(icon);
+                }
+                tray_builder.build(app)?;
+            }
+
             tauri::async_runtime::spawn(async move {
                 if let Err(error) = restart_server(&state, config).await {
                     set_runtime_error(&state, error);
@@ -305,6 +353,9 @@ async fn snapshot(app: &AppHandle, state: &Arc<RuntimeState>) -> Result<Settings
         .read()
         .map_err(|_| "状态锁不可用".to_string())?
         .clone();
+    let mut status = status;
+    status.endpoint = local_endpoint(&status.host, status.port);
+    status.lan_endpoint = lan_endpoint(&status.host, status.port, &status.endpoint);
 
     Ok(SettingsSnapshot {
         config,
@@ -344,6 +395,8 @@ async fn restart_server(state: &Arc<RuntimeState>, config: AppConfig) -> Result<
             .write()
             .map_err(|_| "状态锁不可用".to_string())?;
         status.host = config.host;
+        status.endpoint = local_endpoint(&status.host, status.port);
+        status.lan_endpoint = lan_endpoint(&status.host, status.port, &status.endpoint);
         status.last_error = warning;
         return Ok(());
     }
@@ -391,6 +444,11 @@ async fn restart_server(state: &Arc<RuntimeState>, config: AppConfig) -> Result<
             host: config.host.clone(),
             port: local_address.port(),
             endpoint: local_endpoint(&config.host, local_address.port()),
+            lan_endpoint: lan_endpoint(
+                &config.host,
+                local_address.port(),
+                &local_endpoint(&config.host, local_address.port()),
+            ),
             last_error: warning,
         };
     }
@@ -936,6 +994,45 @@ fn local_endpoint(host: &str, port: u16) -> String {
         format!("http://[{display_host}]:{port}")
     } else {
         format!("http://{display_host}:{port}")
+    }
+}
+
+fn lan_endpoint(host: &str, port: u16, local_url: &str) -> Option<String> {
+    if !host_accepts_lan_connections(host) {
+        return None;
+    }
+
+    let ip = lan_ipv4()?;
+    let endpoint = local_endpoint(&ip.to_string(), port);
+    (endpoint != local_url).then_some(endpoint)
+}
+
+fn host_accepts_lan_connections(host: &str) -> bool {
+    let normalized = host.trim().trim_matches(['[', ']']);
+    match normalized.parse::<IpAddr>() {
+        Ok(IpAddr::V4(address)) => address.is_unspecified() || !address.is_loopback(),
+        Ok(IpAddr::V6(address)) => address.is_unspecified() || !address.is_loopback(),
+        Err(_) => false,
+    }
+}
+
+fn lan_ipv4() -> Option<Ipv4Addr> {
+    // Connecting a UDP socket does not send a packet. The OS only uses the
+    // destination to select the active network interface, so the destination
+    // does not need to accept traffic.
+    let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
+    socket.connect((Ipv4Addr::new(192, 0, 2, 1), 80)).ok()?;
+    match socket.local_addr().ok()?.ip() {
+        IpAddr::V4(address) if !address.is_unspecified() && !address.is_loopback() => Some(address),
+        _ => None,
+    }
+}
+
+#[cfg(desktop)]
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
     }
 }
 
