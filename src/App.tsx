@@ -1,6 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  Bell,
+  Check,
+  CheckCircle,
+  CircleNotch,
+  Code,
+  Copy,
+  FloppyDisk,
+  GearSix,
+  Globe,
+  Heartbeat,
+  House,
+  Info,
+  PaperPlaneTilt,
+  Power,
+  SlidersHorizontal,
+  WarningCircle,
+  WindowsLogo,
+  X,
+} from "@phosphor-icons/react";
 
 type AppConfig = {
   host: string;
@@ -258,134 +278,111 @@ function App(): ReactNode {
 
   const status = snapshot.status;
   const localEndpoint = status.endpoint || `http://127.0.0.1:${status.port}`;
-  const statusOrbClass = [
-    "status-orb",
-    isLoading ? "is-loading" : status.running ? "is-online" : "is-offline",
-  ].join(" ");
-  const statusDetail = status.running
-    ? status.lastError
-      ? `${status.host}:${status.port} · ${status.lastError}`
-      : `${status.host}:${status.port} · 可接收外部通知请求`
-    : status.lastError || "保存配置后，服务会自动尝试启动";
   const saveState = isLoading
     ? "等待初始化"
     : status.running
       ? status.lastError ? "服务已运行，但配置有警告" : "服务已就绪"
       : "服务未运行";
+  const statusIconClass = isLoading
+    ? "bg-slate-100 text-slate-500 ring-slate-200"
+    : status.running
+      ? "bg-emerald-50 text-emerald-600 ring-emerald-100"
+      : "bg-amber-50 text-amber-600 ring-amber-100";
+  const toastClass = toast?.tone === "success"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+    : toast?.tone === "error"
+      ? "border-rose-200 bg-rose-50 text-rose-800"
+      : "border-slate-200 bg-white text-slate-700";
 
   return (
-    <>
-      <div className="app-shell">
-        <aside className="sidebar">
-          <div className="brand-lockup">
-            <div className="brand-mark" aria-hidden="true">
-              <span></span><span></span><span></span>
-            </div>
-            <div>
-              <p className="eyebrow">ATTENTIVE KIT</p>
-              <p className="brand-name">Desktop</p>
-            </div>
-          </div>
-
-          <div className="sidebar-rule"></div>
-
-          <nav className="side-nav" aria-label="主导航">
-            <p className="nav-label">工作区</p>
-            <a className="nav-item is-active" href="#service-settings" aria-current="page">
-              <span className="nav-icon nav-icon-sliders" aria-hidden="true">
-                <i></i><i></i><i></i>
-              </span>
-              <span>服务设置</span>
-              <span className="nav-active-dot" aria-hidden="true"></span>
+    <div className="flex h-screen min-w-[320px] flex-col overflow-hidden bg-[#f7f8fb] text-slate-900">
+      <div className="flex min-h-0 flex-1">
+        <aside className="hidden w-[260px] shrink-0 flex-col border-r border-slate-200 bg-white md:flex" aria-label="应用侧栏">
+          <nav className="px-2 pt-[18px]" aria-label="主导航">
+            <a
+              className="relative flex h-[54px] items-center gap-3 rounded-xl bg-[#eaf2ff] px-5 text-[15px] font-medium text-[#1464dc] before:absolute before:inset-y-0 before:left-0 before:w-1 before:rounded-r-full before:bg-[#1464dc]"
+              href="#service-status"
+              aria-current="page"
+            >
+              <House size={22} weight="fill" aria-hidden="true" />
+              <span>概览</span>
+            </a>
+            <a
+              className="mt-2 flex h-[54px] items-center gap-3 rounded-xl px-5 text-[15px] font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+              href="#service-config"
+            >
+              <GearSix size={22} weight="regular" aria-hidden="true" />
+              <span>服务配置</span>
             </a>
           </nav>
 
-          <div className="sidebar-footer">
-            <div className="os-badge">
-              <span className="windows-glyph" aria-hidden="true">⊞</span>
+          <div className="mt-auto space-y-4 px-5 pb-5">
+            <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-500">
+              <WindowsLogo size={18} weight="duotone" className="text-[#1464dc]" aria-hidden="true" />
               <span>Windows 原生通知</span>
             </div>
-            <p className="version-label">ATTENTIVE DESKTOP <span>v0.1</span></p>
+            <p className="px-1 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-300">Attentive Desktop <span className="text-slate-400">v0.1</span></p>
           </div>
         </aside>
 
-        <main className="main-content" id="service-settings">
-          <header className="page-header">
-            <div>
-              <p className="eyebrow accent-eyebrow">LOCAL SERVICE / CONFIGURATION</p>
-              <h1>服务设置</h1>
-              <p className="page-intro">管理本机通知服务的监听方式，让其他工具可以稳定地把消息送到 Windows 通知中心。</p>
-            </div>
-            <div className="header-meta">
-              <span className="local-chip">
-                <span className="chip-dot"></span>
-                {status.lanEndpoint ? "本机服务 · 支持局域网" : "仅运行在本机"}
-              </span>
-              <button
-                className="icon-button"
-                type="button"
-                title="刷新状态"
-                aria-label="刷新状态"
-                onClick={() => void loadSettings()}
-                disabled={isLoading}
-              >
-                <RefreshIcon />
-              </button>
-            </div>
-          </header>
-
-          <section className="status-banner" aria-live="polite">
-            <div className={statusOrbClass}><span></span></div>
-            <div className="status-copy">
-              <p className="status-kicker">
-                {isLoading ? "正在读取服务状态" : status.running ? "NOTIFIER SERVICE / ONLINE" : "NOTIFIER SERVICE / OFFLINE"}
-              </p>
-              <p className="status-title">
-                {isLoading ? "准备中…" : status.running ? "通知服务正在运行" : "通知服务未运行"}
-              </p>
-              <p className="status-detail">{isLoading ? "正在连接本地运行时" : statusDetail}</p>
-            </div>
-            <div className="status-endpoints">
-              <EndpointRow
-                label="本机地址"
-                eyebrow="LOCAL ENDPOINT"
-                endpoint={localEndpoint}
-                onCopy={() => void copyEndpoint(localEndpoint, "本机地址")}
-              />
-              {status.lanEndpoint ? (
-                <EndpointRow
-                  label="局域网地址"
-                  eyebrow="LAN ENDPOINT"
-                  endpoint={status.lanEndpoint}
-                  onCopy={() => void copyEndpoint(status.lanEndpoint ?? "", "局域网地址")}
-                />
-              ) : (
-                <div className="status-endpoint is-unavailable">
-                  <span className="endpoint-label">LAN ENDPOINT</span>
-                  <span className="endpoint-unavailable">监听地址未开放局域网访问</span>
+        <main className="app-scroll min-w-0 flex-1 overflow-y-auto">
+          <div className="w-full px-5 py-4 sm:px-5">
+            <div className="grid items-start gap-[18px] xl:grid-cols-[minmax(0,0.935fr)_minmax(0,1.065fr)]">
+              <section id="service-status" className="flex min-h-[294px] flex-col rounded-[11px] border border-slate-200 bg-white p-5 shadow-[0_1px_4px_rgba(28,45,75,0.04)]" aria-labelledby="status-title">
+                <div className="flex items-center gap-3">
+                  <Heartbeat size={25} weight="regular" className="text-slate-800" aria-hidden="true" />
+                  <h2 id="status-title" className="text-[20px] font-semibold tracking-[-0.02em] text-slate-900">服务运行状态</h2>
                 </div>
-              )}
-            </div>
-          </section>
 
-          <div className="content-grid">
-            <div className="settings-column">
-              <section className="settings-card" aria-labelledby="listener-title">
-                <div className="card-heading">
-                  <div>
-                    <p className="section-number">01 / 02</p>
-                    <h2 id="listener-title">监听配置</h2>
+                <div className="mt-4 flex flex-1 items-start gap-7 border-t border-slate-100 pt-3 sm:px-3">
+                  <div className="flex min-w-0 items-center gap-7">
+                    <div className={`flex h-[74px] w-[74px] shrink-0 items-center justify-center rounded-full ring-8 ${statusIconClass}`}>
+                      {isLoading ? (
+                        <CircleNotch className="animate-spin" size={29} weight="bold" aria-hidden="true" />
+                      ) : status.running ? (
+                        <Check size={35} weight="bold" aria-hidden="true" />
+                      ) : (
+                        <X size={32} weight="bold" aria-hidden="true" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`text-[21px] font-semibold tracking-[-0.03em] ${
+                        isLoading ? "text-slate-600" : status.running ? "text-emerald-600" : "text-slate-700"
+                      }`}>
+                        {isLoading ? "准备中" : status.running ? "运行中" : "未运行"}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">{isLoading ? "正在连接本地运行时" : status.running ? "服务已稳定运行" : "保存配置后将自动尝试启动"}</p>
+                      <p className="mt-2 font-mono text-xs text-slate-400">{status.host}:{status.port}</p>
+                    </div>
                   </div>
-                  <span className="heading-icon" aria-hidden="true"><SettingsIcon /></span>
-                </div>
-                <p className="card-description">这些参数会作用于 notifier HTTP API。修改后需要重启服务才能生效。</p>
 
-                <form ref={formRef} onSubmit={(event) => void saveSettings(event)} noValidate>
-                  <div className="form-row two-up">
-                    <label className="field-group">
-                      <span className="field-label">监听地址 <span className="field-key">HOST</span></span>
-                      <span className="field-control with-suffix">
+                  <div className={`ml-auto w-[180px] shrink-0 border-l border-slate-100 pl-7 ${status.lastError ? "text-amber-700" : "text-slate-600"}`}>
+                    <p className="text-sm font-medium">最近错误信息</p>
+                    <div className="mt-3 flex items-start gap-2">
+                      {status.lastError ? (
+                        <WarningCircle className="mt-0.5 shrink-0 text-amber-600" size={18} weight="fill" aria-hidden="true" />
+                      ) : (
+                        <CheckCircle className="mt-0.5 shrink-0 text-emerald-500" size={18} weight="fill" aria-hidden="true" />
+                      )}
+                      <span className="text-sm leading-5">{status.lastError || "暂无错误"}</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section id="service-config" className="min-h-[294px] rounded-[11px] border border-slate-200 bg-white p-5 shadow-[0_1px_4px_rgba(28,45,75,0.04)]" aria-labelledby="config-title">
+                <div className="flex items-center gap-3">
+                  <GearSix size={25} weight="regular" className="text-slate-800" aria-hidden="true" />
+                  <h2 id="config-title" className="text-[20px] font-semibold tracking-[-0.02em] text-slate-900">服务配置</h2>
+                </div>
+
+                <form ref={formRef} className="mt-4" onSubmit={(event) => void saveSettings(event)} noValidate>
+                  <div className="space-y-3">
+                    <label className="grid grid-cols-[143px_minmax(0,1fr)] items-center gap-3">
+                      <span className="text-sm text-slate-700">监听地址</span>
+                      <span className="relative block">
                         <input
+                          className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100"
                           name="host"
                           type="text"
                           value={draft.host}
@@ -394,15 +391,15 @@ function App(): ReactNode {
                           spellCheck={false}
                           placeholder="0.0.0.0"
                         />
-                        <span className="input-suffix">bind</span>
+                        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center font-mono text-[10px] uppercase tracking-[0.08em] text-slate-400">bind</span>
                       </span>
-                      <span className="field-help">使用 0.0.0.0 接受局域网请求，127.0.0.1 仅允许本机访问。</span>
                     </label>
 
-                    <label className="field-group">
-                      <span className="field-label">端口 <span className="field-key">PORT</span></span>
-                      <span className="field-control with-suffix">
+                    <label className="grid grid-cols-[143px_minmax(0,1fr)] items-center gap-3">
+                      <span className="text-sm text-slate-700">监听端口</span>
+                      <span className="relative block">
                         <input
+                          className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 pr-12 text-sm text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100"
                           name="port"
                           type="number"
                           min="0"
@@ -412,59 +409,85 @@ function App(): ReactNode {
                           onChange={(event) => updateDraft("port", event)}
                           placeholder="8765"
                         />
-                        <span className="input-suffix">tcp</span>
+                        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center font-mono text-[10px] uppercase tracking-[0.08em] text-slate-400">tcp</span>
                       </span>
-                      <span className="field-help">默认端口 8765；设为 0 可使用随机空闲端口。</span>
+                    </label>
+
+                    <label className="grid grid-cols-[143px_minmax(0,1fr)] items-center gap-3">
+                      <span className="text-sm text-slate-700">请求体大小上限</span>
+                      <span className="relative block">
+                        <input
+                          className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 pr-16 text-sm text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                          name="maxBodyBytes"
+                          type="number"
+                          min="1"
+                          step="1024"
+                          value={draft.maxBodyBytes}
+                          onChange={(event) => updateDraft("maxBodyBytes", event)}
+                          placeholder="1048576"
+                        />
+                        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center font-mono text-[10px] uppercase tracking-[0.08em] text-slate-400">bytes</span>
+                      </span>
                     </label>
                   </div>
 
-                  <label className="field-group full-field">
-                    <span className="field-label">请求体上限 <span className="field-key">MAX BODY BYTES</span></span>
-                    <span className="field-control with-suffix">
-                      <input
-                        name="maxBodyBytes"
-                        type="number"
-                        min="1"
-                        step="1024"
-                        value={draft.maxBodyBytes}
-                        onChange={(event) => updateDraft("maxBodyBytes", event)}
-                        placeholder="1048576"
-                      />
-                      <span className="input-suffix">bytes</span>
-                    </span>
-                    <span className="field-help">超过上限的请求会返回 413。默认 1 MB，适合标题、正文和少量 metadata。</span>
-                  </label>
-
-                  <div className="form-actions">
-                    <button className="secondary-button" type="button" onClick={resetSettings}>恢复默认值</button>
-                    <div className="action-cluster">
-                      <span className={`dirty-indicator${isDirty ? " is-dirty" : ""}`}>
-                        {isDirty ? "有未保存修改" : "已保存"}
-                      </span>
-                      <button className="primary-button" type="submit" disabled={busyAction !== null}>
-                        <span>{busyAction === "save" ? "正在重启服务…" : "保存并重启服务"}</span>
-                        <ArrowIcon />
-                      </button>
-                    </div>
+                  <div className="mt-4 flex gap-3 border-t border-slate-100 pt-3">
+                    <button
+                      className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                      type="button"
+                      onClick={resetSettings}
+                    >
+                      恢复默认值
+                    </button>
+                    <button
+                      className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg bg-[#1769e8] px-3 text-sm font-medium text-white shadow-[0_4px_10px_rgba(23,105,232,0.2)] transition hover:bg-[#0f5fd8] disabled:cursor-not-allowed disabled:opacity-60"
+                      type="submit"
+                      disabled={busyAction !== null}
+                    >
+                      {busyAction === "save" ? <CircleNotch className="animate-spin" size={16} aria-hidden="true" /> : <FloppyDisk size={16} aria-hidden="true" />}
+                      <span>{busyAction === "save" ? "正在重启…" : "保存并重启服务"}</span>
+                    </button>
                   </div>
                 </form>
               </section>
+            </div>
 
-              <section className="settings-card compact-card" aria-labelledby="startup-title">
-                <div className="card-heading">
-                  <div>
-                    <p className="section-number">02 / 02</p>
-                    <h2 id="startup-title">启动行为</h2>
+            <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,0.625fr)_minmax(0,1fr)]">
+              <div className="space-y-4">
+                <section className="min-h-[216px] rounded-[11px] border border-slate-200 bg-white p-5 shadow-[0_1px_4px_rgba(28,45,75,0.04)]" aria-labelledby="endpoint-title">
+                  <div className="flex items-center gap-3">
+                    <Globe size={25} weight="regular" className="text-slate-800" aria-hidden="true" />
+                    <h2 id="endpoint-title" className="text-[20px] font-semibold tracking-[-0.02em] text-slate-900">接口地址</h2>
                   </div>
-                  <span className="heading-icon heading-icon-warm" aria-hidden="true"><StartupIcon /></span>
-                </div>
-                <div className="setting-toggle-row">
-                  <div>
-                    <p className="toggle-title">开机自动启动</p>
-                    <p className="toggle-description">登录 Windows 后自动运行服务，确保编辑器和脚本无需手动唤醒。</p>
+
+                  <div className="mt-4 space-y-1">
+                    <EndpointRow label="本机地址" endpoint={localEndpoint} onCopy={() => void copyEndpoint(localEndpoint, "本机地址")} />
+                    {status.lanEndpoint ? (
+                      <EndpointRow label="局域网地址" endpoint={status.lanEndpoint} onCopy={() => void copyEndpoint(status.lanEndpoint ?? "", "局域网地址")} />
+                    ) : (
+                      <div className="grid grid-cols-[90px_minmax(0,1fr)_auto] items-center gap-3 py-2">
+                        <span className="text-sm text-slate-600">局域网地址</span>
+                        <span className="truncate text-xs text-slate-400">监听地址未开放局域网访问</span>
+                        <span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] text-slate-400">不可用</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
+                    <Info className="text-blue-600" size={16} weight="fill" aria-hidden="true" />
+                    <span>请确保防火墙已允许对应端口访问</span>
+                  </div>
+                </section>
+
+                <section className="flex min-h-[116px] items-center gap-3 rounded-[11px] border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_4px_rgba(28,45,75,0.04)]" aria-labelledby="startup-title">
+                  <Power size={25} weight="regular" className="shrink-0 text-slate-800" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <h2 id="startup-title" className="text-[19px] font-semibold tracking-[-0.02em] text-slate-900">启动设置</h2>
+                    <p className="mt-1 text-sm text-slate-500">开机自动启动</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-400">登录 Windows 后自动启动服务</p>
                   </div>
                   <button
-                    className={`toggle${snapshot.autostart ? " is-on" : ""}`}
+                    className={`relative ml-auto inline-flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition ${snapshot.autostart ? "bg-blue-600" : "bg-slate-300"} disabled:cursor-not-allowed disabled:opacity-60`}
                     type="button"
                     role="switch"
                     aria-checked={snapshot.autostart}
@@ -472,97 +495,129 @@ function App(): ReactNode {
                     onClick={() => void toggleAutostart()}
                     disabled={busyAction !== null}
                   >
-                    <span></span>
+                    <span className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${snapshot.autostart ? "translate-x-5" : "translate-x-0"}`} />
                   </button>
+                </section>
+              </div>
+
+              <section className="min-h-[348px] rounded-[11px] border border-slate-200 bg-white p-5 shadow-[0_1px_4px_rgba(28,45,75,0.04)]" aria-labelledby="test-title">
+                <div className="flex items-center gap-3">
+                  <PaperPlaneTilt size={25} weight="regular" className="text-slate-800" aria-hidden="true" />
+                  <h2 id="test-title" className="text-[20px] font-semibold tracking-[-0.02em] text-slate-900">测试通知</h2>
+                </div>
+
+                <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+                  <div className="flex min-h-[258px] flex-col gap-4">
+                    <div className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3">
+                      <span className="text-sm text-slate-700">通知标题</span>
+                      <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-600 shadow-sm">测试通知</div>
+                    </div>
+                    <div className="grid min-h-[118px] grid-cols-[72px_minmax(0,1fr)] items-start gap-3">
+                      <span className="pt-2 text-sm text-slate-700">通知内容</span>
+                      <div className="min-h-[118px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-600 shadow-sm">这是一条来自通知服务管理器的测试消息。</div>
+                    </div>
+                    <button
+                      className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#1769e8] px-4 text-sm font-medium text-white shadow-[0_5px_12px_rgba(23,105,232,0.2)] transition hover:bg-[#0f5fd8] disabled:cursor-not-allowed disabled:opacity-60"
+                      type="button"
+                      onClick={() => void sendTestNotification()}
+                      disabled={busyAction !== null}
+                    >
+                      {busyAction === "test" ? <CircleNotch className="animate-spin" size={18} aria-hidden="true" /> : <WindowsLogo size={18} weight="duotone" aria-hidden="true" />}
+                      <span>{busyAction === "test" ? "正在提交 Toast…" : "发送 Windows Toast 测试通知"}</span>
+                    </button>
+                  </div>
+
+                  <div className="relative hidden min-h-[258px] overflow-hidden rounded-[10px] bg-gradient-to-br from-[#a9c8f7] via-[#dceafd] to-[#88afe9] xl:block">
+                    <div className="absolute -left-12 -top-12 h-44 w-44 rounded-full border border-white/40 bg-white/10" />
+                    <div className="absolute -bottom-14 -right-8 h-52 w-52 rounded-full border border-white/40 bg-white/10" />
+                    <div className="absolute left-5 right-5 top-12 rounded-lg bg-white/90 px-4 py-3 shadow-[0_8px_22px_rgba(48,91,156,0.2)] backdrop-blur-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white">
+                          <Bell size={14} weight="fill" aria-hidden="true" />
+                        </div>
+                        <span className="text-xs font-semibold text-slate-700">测试通知</span>
+                        <X className="ml-auto text-slate-400" size={13} aria-hidden="true" />
+                      </div>
+                      <p className="mt-3 text-xs leading-5 text-slate-600">这是一条来自通知服务管理器的<br />测试消息。</p>
+                      <p className="mt-2 text-right text-[10px] text-slate-400">现在</p>
+                    </div>
+                  </div>
                 </div>
               </section>
             </div>
 
-            <aside className="utility-column">
-              <section className="utility-card test-card">
-                <div className="utility-topline"><span>快速验证</span><span className="live-mark">LIVE</span></div>
-                <h2>发一条 Toast 测试</h2>
-                <p>确认 Windows Toast 能正常显示，并检查系统通知权限。</p>
-                <button className="test-button" type="button" onClick={() => void sendTestNotification()} disabled={busyAction !== null}>
-                  <span className="test-button-icon"><SendIcon /></span>
-                  <span>{busyAction === "test" ? "正在提交 Toast…" : "发送 Toast 测试"}</span>
-                  <ArrowIcon className="button-arrow" />
-                </button>
-              </section>
-
-              <section className="utility-card protocol-card">
-                <div className="utility-topline"><span>协议摘要</span><span className="protocol-version">API v1</span></div>
-                <div className="protocol-line"><span className="method-badge get">GET</span><code>/health</code></div>
-                <div className="protocol-line"><span className="method-badge post">POST</span><code>/api/v1/notifications</code></div>
-                <p className="protocol-note">通知支持 <code>http</code>、<code>https</code> 和 <code>vscode</code> action URI。</p>
-              </section>
-
-              <div className="quote-note">
-                <span className="quote-mark">“</span>
-                <p>让通知保持安静、可靠，并且恰到好处。</p>
+            <section className="mt-[18px] overflow-hidden rounded-[11px] border border-slate-200 bg-white shadow-[0_1px_4px_rgba(28,45,75,0.04)]" aria-labelledby="api-title">
+              <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+                <Code size={25} weight="regular" className="text-slate-800" aria-hidden="true" />
+                <h2 id="api-title" className="text-[20px] font-semibold tracking-[-0.02em] text-slate-900">通知 API</h2>
               </div>
-            </aside>
-          </div>
+              <div className="overflow-x-auto px-3 pb-3 pt-1">
+                <table className="w-full min-w-[540px] border-collapse text-left text-sm">
+                  <thead className="text-xs text-slate-400">
+                    <tr>
+                      <th className="border-b border-slate-100 px-3 py-2.5 font-medium">方法</th>
+                      <th className="border-b border-slate-100 px-3 py-2.5 font-medium">接口</th>
+                      <th className="border-b border-slate-100 px-3 py-2.5 font-medium">说明</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border-b border-slate-100 px-3 py-2"><span className="rounded-md bg-emerald-50 px-2 py-1 font-mono text-[11px] font-semibold text-emerald-700">POST</span></td>
+                      <td className="border-b border-slate-100 px-3 py-2 font-mono text-xs text-slate-700">/api/v1/notifications</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-xs text-slate-500">发送通知</td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2"><span className="rounded-md bg-blue-50 px-2 py-1 font-mono text-[11px] font-semibold text-blue-700">GET</span></td>
+                      <td className="px-3 py-2 font-mono text-xs text-slate-700">/health</td>
+                      <td className="px-3 py-2 text-xs text-slate-500">健康检查</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
-          <footer className="page-footer">
-            <span>所有配置保存在当前用户的应用配置目录</span>
-            <span className="footer-separator">•</span>
-            <span id="save-state">{saveState}</span>
-          </footer>
+            <footer className="flex flex-col gap-1 px-1 pb-1 pt-3 text-[11px] text-slate-400 sm:flex-row sm:items-center sm:gap-2">
+              <span>所有配置保存在当前用户的应用配置目录</span>
+              <span className="hidden text-slate-300 sm:inline">•</span>
+              <span className={status.running ? "text-emerald-600" : "text-slate-500"}>{saveState}</span>
+            </footer>
+          </div>
         </main>
       </div>
 
-      <div className="toast-region" aria-live="polite" aria-atomic="true">
+      <div className="pointer-events-none fixed bottom-5 right-5 z-50 max-w-[min(360px,calc(100vw-2.5rem))]" aria-live="polite" aria-atomic="true">
         {toast ? (
-          <div key={toast.id} className={`toast-message ${toast.tone} is-visible`}>
-            <span className="toast-message-dot"></span>
-            <span>{toast.message}</span>
+          <div key={toast.id} className={`pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-[0_10px_30px_rgba(27,54,93,0.14)] ${toastClass}`}>
+            <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${toast.tone === "success" ? "bg-emerald-500" : toast.tone === "error" ? "bg-rose-500" : "bg-slate-400"}`} />
+            <span className="leading-5">{toast.message}</span>
           </div>
         ) : null}
       </div>
-    </>
+    </div>
   );
 }
 
 type EndpointRowProps = {
   label: string;
-  eyebrow: string;
   endpoint: string;
   onCopy: () => void;
 };
 
-function EndpointRow({ label, eyebrow, endpoint, onCopy }: EndpointRowProps): ReactNode {
+function EndpointRow({ label, endpoint, onCopy }: EndpointRowProps): ReactNode {
   return (
-    <div className="status-endpoint">
-      <span className="endpoint-label">{eyebrow} · {label}</span>
-      <code title={endpoint}>{endpoint}</code>
-      <button className="copy-button" type="button" onClick={onCopy}>复制</button>
+    <div className="grid grid-cols-[90px_minmax(0,1fr)_auto] items-center gap-3 py-2">
+      <span className="text-sm text-slate-600">{label}</span>
+      <code className="truncate font-mono text-xs text-blue-700" title={endpoint}>{endpoint}</code>
+      <button
+        className="inline-flex h-8 min-w-[86px] items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+        type="button"
+        onClick={onCopy}
+      >
+        <Copy size={14} aria-hidden="true" />
+        <span>复制</span>
+      </button>
     </div>
   );
-}
-
-type IconProps = {
-  className?: string;
-};
-
-function RefreshIcon(): ReactNode {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-14.8-3L3 11m0 0V5m0 6h6M4 13a8.1 8.1 0 0 0 14.8 3L21 13m0 0v6m0-6h-6" /></svg>;
-}
-
-function SettingsIcon(): ReactNode {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 12h3M11 12h9M4 17h10M18 17h2" /><circle cx="16" cy="7" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="16" cy="17" r="2" /></svg>;
-}
-
-function StartupIcon(): ReactNode {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10m0-10 4 4m-4-4-4 4" /><path d="M5 11v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" /></svg>;
-}
-
-function SendIcon(): ReactNode {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4 9 15" /><path d="m20 4-7 16-4-5-5-4 16-7Z" /></svg>;
-}
-
-function ArrowIcon({ className = "" }: IconProps): ReactNode {
-  return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" /></svg>;
 }
 
 export default App;
