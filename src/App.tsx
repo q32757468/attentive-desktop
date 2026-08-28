@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Button, Card, FormField, SectionHeader, TextArea, TextInput } from "./components/ui";
 import {
   Bell,
   Check,
@@ -351,11 +352,12 @@ function App(): ReactNode {
         <main className="app-scroll min-w-0 flex-1 overflow-y-auto">
           <div className="w-full px-5 py-4 sm:px-5">
             <div className="grid items-start gap-[18px] xl:grid-cols-[minmax(0,0.935fr)_minmax(0,1.065fr)]">
-              <section id="service-status" className="flex min-h-[294px] flex-col rounded-[11px] border border-slate-200 bg-white p-5 shadow-[0_1px_4px_rgba(28,45,75,0.04)]" aria-labelledby="status-title">
-                <div className="flex items-center gap-3">
-                  <Heartbeat size={25} weight="regular" className="text-slate-800" aria-hidden="true" />
-                  <h2 id="status-title" className="text-[20px] font-semibold tracking-[-0.02em] text-slate-900">服务运行状态</h2>
-                </div>
+              <Card id="service-status" className="flex min-h-[294px] flex-col p-5" aria-labelledby="status-title">
+                <SectionHeader
+                  id="status-title"
+                  icon={<Heartbeat size={25} weight="regular" className="text-slate-800" aria-hidden="true" />}
+                  title="服务运行状态"
+                />
 
                 <div className="mt-4 flex flex-1 items-start gap-7 border-t border-slate-100 pt-3 sm:px-3">
                   <div className="flex min-w-0 items-center gap-7">
@@ -391,21 +393,20 @@ function App(): ReactNode {
                     </div>
                   </div>
                 </div>
-              </section>
+              </Card>
 
-              <section id="service-config" className="min-h-[294px] rounded-[11px] border border-slate-200 bg-white p-5 shadow-[0_1px_4px_rgba(28,45,75,0.04)]" aria-labelledby="config-title">
-                <div className="flex items-center gap-3">
-                  <GearSix size={25} weight="regular" className="text-slate-800" aria-hidden="true" />
-                  <h2 id="config-title" className="text-[20px] font-semibold tracking-[-0.02em] text-slate-900">服务配置</h2>
-                </div>
+              <Card id="service-config" className="min-h-[294px] p-5" aria-labelledby="config-title">
+                <SectionHeader
+                  id="config-title"
+                  icon={<GearSix size={25} weight="regular" className="text-slate-800" aria-hidden="true" />}
+                  title="服务配置"
+                />
 
                 <form ref={formRef} className="mt-4" onSubmit={(event) => void saveSettings(event)} noValidate>
                   <div className="space-y-3">
-                    <label className="grid grid-cols-[143px_minmax(0,1fr)] items-center gap-3">
-                      <span className="text-sm text-slate-700">监听地址</span>
+                    <FormField label="监听地址" className="grid-cols-[143px_minmax(0,1fr)]">
                       <span className="relative block">
-                        <input
-                          className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                        <TextInput
                           name="host"
                           type="text"
                           value={draft.host}
@@ -416,13 +417,12 @@ function App(): ReactNode {
                         />
                         <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center font-mono text-[10px] uppercase tracking-[0.08em] text-slate-400">bind</span>
                       </span>
-                    </label>
+                    </FormField>
 
-                    <label className="grid grid-cols-[143px_minmax(0,1fr)] items-center gap-3">
-                      <span className="text-sm text-slate-700">监听端口</span>
+                    <FormField label="监听端口" className="grid-cols-[143px_minmax(0,1fr)]">
                       <span className="relative block">
-                        <input
-                          className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 pr-12 text-sm text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                        <TextInput
+                          className="pr-12"
                           name="port"
                           type="number"
                           min="0"
@@ -434,13 +434,12 @@ function App(): ReactNode {
                         />
                         <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center font-mono text-[10px] uppercase tracking-[0.08em] text-slate-400">tcp</span>
                       </span>
-                    </label>
+                    </FormField>
 
-                    <label className="grid grid-cols-[143px_minmax(0,1fr)] items-center gap-3">
-                      <span className="text-sm text-slate-700">请求体大小上限</span>
+                    <FormField label="请求体大小上限" className="grid-cols-[143px_minmax(0,1fr)]">
                       <span className="relative block">
-                        <input
-                          className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 pr-16 text-sm text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                        <TextInput
+                          className="pr-16"
                           name="maxBodyBytes"
                           type="number"
                           min="1"
@@ -451,37 +450,39 @@ function App(): ReactNode {
                         />
                         <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center font-mono text-[10px] uppercase tracking-[0.08em] text-slate-400">bytes</span>
                       </span>
-                    </label>
+                    </FormField>
                   </div>
 
                   <div className="mt-4 flex gap-3 border-t border-slate-100 pt-3">
-                    <button
-                      className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                    <Button
+                      variant="secondary"
+                      className="flex-1"
                       type="button"
                       onClick={resetSettings}
                     >
                       恢复默认值
-                    </button>
-                    <button
-                      className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg bg-[#1769e8] px-3 text-sm font-medium text-white shadow-[0_4px_10px_rgba(23,105,232,0.2)] transition hover:bg-[#0f5fd8] disabled:cursor-not-allowed disabled:opacity-60"
+                    </Button>
+                    <Button
+                      className="flex-1"
                       type="submit"
                       disabled={busyAction !== null}
                     >
                       {busyAction === "save" ? <CircleNotch className="animate-spin" size={16} aria-hidden="true" /> : <FloppyDisk size={16} aria-hidden="true" />}
                       <span>{busyAction === "save" ? "正在重启…" : "保存并重启服务"}</span>
-                    </button>
+                    </Button>
                   </div>
                 </form>
-              </section>
+              </Card>
             </div>
 
             <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,0.625fr)_minmax(0,1fr)]">
               <div className="space-y-4">
-                <section className="min-h-[216px] rounded-[11px] border border-slate-200 bg-white p-5 shadow-[0_1px_4px_rgba(28,45,75,0.04)]" aria-labelledby="endpoint-title">
-                  <div className="flex items-center gap-3">
-                    <Globe size={25} weight="regular" className="text-slate-800" aria-hidden="true" />
-                    <h2 id="endpoint-title" className="text-[20px] font-semibold tracking-[-0.02em] text-slate-900">接口地址</h2>
-                  </div>
+                <Card className="min-h-[216px] p-5" aria-labelledby="endpoint-title">
+                  <SectionHeader
+                    id="endpoint-title"
+                    icon={<Globe size={25} weight="regular" className="text-slate-800" aria-hidden="true" />}
+                    title="接口地址"
+                  />
 
                   <div className="mt-4 space-y-1">
                     <EndpointRow label="本机地址" endpoint={localEndpoint} onCopy={() => void copyEndpoint(localEndpoint, "本机地址")} />
@@ -500,9 +501,9 @@ function App(): ReactNode {
                     <Info className="text-blue-600" size={16} weight="fill" aria-hidden="true" />
                     <span>请确保防火墙已允许对应端口访问</span>
                   </div>
-                </section>
+                </Card>
 
-                <section className="flex min-h-[116px] items-center gap-3 rounded-[11px] border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_4px_rgba(28,45,75,0.04)]" aria-labelledby="startup-title">
+                <Card className="flex min-h-[116px] items-center gap-3 px-5 py-4" aria-labelledby="startup-title">
                   <Power size={25} weight="regular" className="shrink-0 text-slate-800" aria-hidden="true" />
                   <div className="min-w-0">
                     <h2 id="startup-title" className="text-[19px] font-semibold tracking-[-0.02em] text-slate-900">启动设置</h2>
@@ -524,47 +525,47 @@ function App(): ReactNode {
                   >
                     <span className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${snapshot.autostart ? "translate-x-5" : "translate-x-0"}`} />
                   </button>
-                </section>
+                </Card>
               </div>
 
-              <section className="min-h-[348px] rounded-[11px] border border-slate-200 bg-white p-5 shadow-[0_1px_4px_rgba(28,45,75,0.04)]" aria-labelledby="test-title">
-                <div className="flex items-center gap-3">
-                  <PaperPlaneTilt size={25} weight="regular" className="text-slate-800" aria-hidden="true" />
-                  <h2 id="test-title" className="text-[20px] font-semibold tracking-[-0.02em] text-slate-900">测试通知</h2>
-                </div>
+              <Card className="min-h-[348px] p-5" aria-labelledby="test-title">
+                <SectionHeader
+                  id="test-title"
+                  icon={<PaperPlaneTilt size={25} weight="regular" className="text-slate-800" aria-hidden="true" />}
+                  title="测试通知"
+                />
 
                 <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
                   <div className="flex min-h-[258px] flex-col gap-4">
-                    <div className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3">
-                      <span className="text-sm text-slate-700">通知标题</span>
-                      <input
-                        className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-base text-slate-600 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+                    <FormField label="通知标题" className="grid-cols-[72px_minmax(0,1fr)]">
+                      <TextInput
                         type="text"
                         value={testTitle}
                         onChange={(event) => setTestTitle(event.target.value)}
-                        disabled={busyAction !== null}
                         aria-label="通知标题"
                       />
-                    </div>
-                    <div className="grid min-h-[132px] grid-cols-[72px_minmax(0,1fr)] items-start gap-3">
-                      <span className="pt-2 text-sm text-slate-700">通知内容</span>
-                      <textarea
-                        className="min-h-[132px] resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-base leading-6 text-slate-600 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+                    </FormField>
+                    <FormField
+                      label="通知内容"
+                      className="grid-cols-[72px_minmax(0,1fr)] min-h-[132px]"
+                      align="start"
+                      labelClassName="pt-2"
+                    >
+                      <TextArea
                         value={testBody}
                         onChange={(event) => setTestBody(event.target.value)}
-                        disabled={busyAction !== null}
                         aria-label="通知内容"
                       />
-                    </div>
-                    <button
-                      className="mt-auto inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#1769e8] px-3 text-sm font-medium text-white shadow-[0_5px_12px_rgba(23,105,232,0.2)] transition hover:bg-[#0f5fd8] disabled:cursor-not-allowed disabled:opacity-60"
+                    </FormField>
+                    <Button
+                      className="mt-auto shadow-[0_5px_12px_rgba(23,105,232,0.2)]"
                       type="button"
                       onClick={() => void sendTestNotification()}
                       disabled={busyAction !== null}
                     >
                       {busyAction === "test" ? <CircleNotch className="animate-spin" size={16} aria-hidden="true" /> : <WindowsLogo size={16} weight="duotone" aria-hidden="true" />}
                       <span>{busyAction === "test" ? "正在提交 Toast…" : "发送 Windows Toast 测试通知"}</span>
-                    </button>
+                    </Button>
                   </div>
 
                   <div className="relative hidden min-h-[258px] overflow-hidden rounded-[10px] bg-gradient-to-br from-[#a9c8f7] via-[#dceafd] to-[#88afe9] xl:block">
@@ -583,14 +584,16 @@ function App(): ReactNode {
                     </div>
                   </div>
                 </div>
-              </section>
+              </Card>
             </div>
 
-            <section className="mt-[18px] overflow-hidden rounded-[11px] border border-slate-200 bg-white shadow-[0_1px_4px_rgba(28,45,75,0.04)]" aria-labelledby="api-title">
-              <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
-                <Code size={25} weight="regular" className="text-slate-800" aria-hidden="true" />
-                <h2 id="api-title" className="text-[20px] font-semibold tracking-[-0.02em] text-slate-900">通知 API</h2>
-              </div>
+            <Card className="mt-[18px] overflow-hidden" aria-labelledby="api-title">
+              <SectionHeader
+                id="api-title"
+                icon={<Code size={25} weight="regular" className="text-slate-800" aria-hidden="true" />}
+                title="通知 API"
+                className="border-b border-slate-100 px-5 py-3"
+              />
               <div className="overflow-x-auto px-3 pb-3 pt-1">
                 <table className="w-full min-w-[540px] border-collapse text-left text-sm">
                   <thead className="text-xs text-slate-400">
@@ -614,7 +617,7 @@ function App(): ReactNode {
                   </tbody>
                 </table>
               </div>
-            </section>
+            </Card>
 
             <footer className="flex flex-col gap-1 px-1 pb-1 pt-3 text-[11px] text-slate-400 sm:flex-row sm:items-center sm:gap-2">
               <span>所有配置保存在当前用户的应用配置目录</span>
