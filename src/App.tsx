@@ -17,7 +17,6 @@ import {
   Info,
   PaperPlaneTilt,
   Power,
-  SlidersHorizontal,
   WarningCircle,
   WindowsLogo,
   X,
@@ -330,13 +329,6 @@ function App(): ReactNode {
             >
               <House size={22} weight="fill" aria-hidden="true" />
               <span>概览</span>
-            </a>
-            <a
-              className="mt-2 flex h-[54px] items-center gap-3 rounded-xl px-5 text-[15px] font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
-              href="#service-config"
-            >
-              <GearSix size={22} weight="regular" aria-hidden="true" />
-              <span>服务配置</span>
             </a>
           </nav>
 

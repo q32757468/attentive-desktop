@@ -38,7 +38,6 @@ button {
 }
 
 button:focus-visible,
-input:focus-visible,
 a:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.24);
   outline-offset: 2px;
