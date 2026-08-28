@@ -42,6 +42,7 @@ type SettingsSnapshot = {
   config: AppConfig;
   status: ServerStatus;
   autostart: boolean;
+  canEnableAutostart: boolean;
 };
 
 type ConfigDraft = {
@@ -79,6 +80,7 @@ const DEFAULT_SNAPSHOT: SettingsSnapshot = {
   config: DEFAULT_CONFIG,
   status: DEFAULT_STATUS,
   autostart: false,
+  canEnableAutostart: false,
 };
 
 function configToDraft(config: AppConfig): ConfigDraft {
@@ -231,6 +233,10 @@ function App(): ReactNode {
 
   const toggleAutostart = async () => {
     const nextValue = !snapshot.autostart;
+    if (nextValue && !snapshot.canEnableAutostart) {
+      showToast("开发版本不能开启开机自动启动，请安装并使用正式版本设置自启", "error");
+      return;
+    }
     setBusyAction("autostart");
     try {
       const nextSnapshot = await invoke<SettingsSnapshot>("set_autostart", { enabled: nextValue });
@@ -484,7 +490,11 @@ function App(): ReactNode {
                   <div className="min-w-0">
                     <h2 id="startup-title" className="text-[19px] font-semibold tracking-[-0.02em] text-slate-900">启动设置</h2>
                     <p className="mt-1 text-sm text-slate-500">开机自动启动</p>
-                    <p className="mt-0.5 truncate text-xs text-slate-400">登录 Windows 后自动启动服务</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-400">
+                      {!snapshot.canEnableAutostart && !snapshot.autostart
+                        ? "开发版本不可开启，请使用正式安装版"
+                        : "登录 Windows 后自动启动服务"}
+                    </p>
                   </div>
                   <button
                     className={`relative ml-auto inline-flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition ${snapshot.autostart ? "bg-blue-600" : "bg-slate-300"} disabled:cursor-not-allowed disabled:opacity-60`}
@@ -493,7 +503,7 @@ function App(): ReactNode {
                     aria-checked={snapshot.autostart}
                     aria-label="开机自动启动"
                     onClick={() => void toggleAutostart()}
-                    disabled={busyAction !== null}
+                    disabled={busyAction !== null || (!snapshot.autostart && !snapshot.canEnableAutostart)}
                   >
                     <span className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${snapshot.autostart ? "translate-x-5" : "translate-x-0"}`} />
                   </button>

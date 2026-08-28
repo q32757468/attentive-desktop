@@ -9,6 +9,8 @@ use axum::{
 use http_body_util::BodyExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+#[cfg(windows)]
+use std::process::Command;
 use std::{
     future::Future,
     net::{IpAddr, Ipv4Addr, UdpSocket},
@@ -19,8 +21,6 @@ use std::{
         Arc, RwLock,
     },
 };
-#[cfg(windows)]
-use std::process::Command;
 use tauri::{async_runtime::JoinHandle, AppHandle, Manager, State as TauriState};
 #[cfg(desktop)]
 use tauri::{
@@ -96,6 +96,7 @@ pub struct SettingsSnapshot {
     pub config: AppConfig,
     pub status: ServerStatus,
     pub autostart: bool,
+    pub can_enable_autostart: bool,
 }
 
 struct RuntimeState {
@@ -367,6 +368,7 @@ async fn snapshot(app: &AppHandle, state: &Arc<RuntimeState>) -> Result<Settings
         config,
         status,
         autostart,
+        can_enable_autostart: !cfg!(debug_assertions),
     })
 }
 
@@ -881,6 +883,10 @@ fn current_autostart(app: &AppHandle) -> Option<bool> {
 }
 
 fn set_autostart_state(app: &AppHandle, enabled: bool) -> Result<(), String> {
+    if enabled && cfg!(debug_assertions) {
+        return Err("开发版本不能开启开机自动启动，请安装并使用正式版本设置自启".to_string());
+    }
+
     #[cfg(desktop)]
     {
         use tauri_plugin_autostart::ManagerExt;
