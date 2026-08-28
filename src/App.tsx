@@ -517,16 +517,14 @@ function App(): ReactNode {
                 </div>
 
                 <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
-                  <div className="flex min-h-[258px] flex-col gap-3">
-                    <div className="flex flex-col gap-4">
-                      <div className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3">
-                        <span className="text-sm text-slate-700">通知标题</span>
-                        <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-600 shadow-sm">测试通知</div>
-                      </div>
-                      <div className="grid min-h-[118px] grid-cols-[72px_minmax(0,1fr)] items-start gap-3">
-                        <span className="pt-2 text-sm text-slate-700">通知内容</span>
-                        <div className="min-h-[118px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-600 shadow-sm">这是一条来自通知服务管理器的测试消息。</div>
-                      </div>
+                  <div className="flex min-h-[258px] flex-col gap-4">
+                    <div className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3">
+                      <span className="text-sm text-slate-700">通知标题</span>
+                      <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-600 shadow-sm">测试通知</div>
+                    </div>
+                    <div className="grid min-h-[118px] grid-cols-[72px_minmax(0,1fr)] items-start gap-3">
+                      <span className="pt-2 text-sm text-slate-700">通知内容</span>
+                      <div className="min-h-[118px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-600 shadow-sm">这是一条来自通知服务管理器的测试消息。</div>
                     </div>
                     <button
                       className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#1769e8] px-3 text-sm font-medium text-white shadow-[0_5px_12px_rgba(23,105,232,0.2)] transition hover:bg-[#0f5fd8] disabled:cursor-not-allowed disabled:opacity-60"
