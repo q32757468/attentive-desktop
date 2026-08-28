@@ -39,6 +39,7 @@ const DEFAULT_MAX_BODY_BYTES: usize = 1024 * 1024;
 const MAX_OPEN_URI_LENGTH: usize = 4096;
 #[cfg(windows)]
 const APP_USER_MODEL_ID: &str = "Attentive.Desktop";
+#[cfg(windows)]
 const APP_DISPLAY_NAME: &str = "Attentive Desktop";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -201,10 +202,17 @@ async fn set_autostart(
 }
 
 #[tauri::command]
-async fn test_notification() -> Result<(), String> {
+async fn test_notification(title: String, body: String) -> Result<(), String> {
+    if title.trim().is_empty() {
+        return Err("通知标题不能为空".to_string());
+    }
+    if body.trim().is_empty() {
+        return Err("通知内容不能为空".to_string());
+    }
+
     let request = NotificationRequest {
-        title: APP_DISPLAY_NAME.to_string(),
-        body: "通知服务连接正常。你可以开始接收来自编辑器和脚本的提醒。".to_string(),
+        title,
+        body,
         source: Some("settings".to_string()),
         action: None,
         _metadata: None,

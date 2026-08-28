@@ -83,6 +83,9 @@ const DEFAULT_SNAPSHOT: SettingsSnapshot = {
   canEnableAutostart: false,
 };
 
+const DEFAULT_TEST_TITLE = "测试通知";
+const DEFAULT_TEST_BODY = "这是一条来自通知服务管理器的测试消息。";
+
 function configToDraft(config: AppConfig): ConfigDraft {
   return {
     host: config.host,
@@ -136,6 +139,8 @@ function App(): ReactNode {
   const [snapshot, setSnapshot] = useState<SettingsSnapshot>(DEFAULT_SNAPSHOT);
   const [savedConfig, setSavedConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [draft, setDraft] = useState<ConfigDraft>(configToDraft(DEFAULT_CONFIG));
+  const [testTitle, setTestTitle] = useState(DEFAULT_TEST_TITLE);
+  const [testBody, setTestBody] = useState(DEFAULT_TEST_BODY);
   const [isLoading, setIsLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -251,9 +256,21 @@ function App(): ReactNode {
   };
 
   const sendTestNotification = async () => {
+    if (!testTitle.trim()) {
+      showToast("通知标题不能为空", "error");
+      return;
+    }
+    if (!testBody.trim()) {
+      showToast("通知内容不能为空", "error");
+      return;
+    }
+
     setBusyAction("test");
     try {
-      await invoke("test_notification");
+      await invoke("test_notification", {
+        title: testTitle,
+        body: testBody,
+      });
       showToast("Toast 测试已提交到 Windows", "success");
     } catch (error) {
       showToast(getErrorMessage(error), "error");
@@ -520,14 +537,27 @@ function App(): ReactNode {
                   <div className="flex min-h-[258px] flex-col gap-4">
                     <div className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3">
                       <span className="text-sm text-slate-700">通知标题</span>
-                      <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-600 shadow-sm">测试通知</div>
+                      <input
+                        className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-base text-slate-600 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+                        type="text"
+                        value={testTitle}
+                        onChange={(event) => setTestTitle(event.target.value)}
+                        disabled={busyAction !== null}
+                        aria-label="通知标题"
+                      />
                     </div>
-                    <div className="grid min-h-[118px] grid-cols-[72px_minmax(0,1fr)] items-start gap-3">
+                    <div className="grid min-h-[132px] grid-cols-[72px_minmax(0,1fr)] items-start gap-3">
                       <span className="pt-2 text-sm text-slate-700">通知内容</span>
-                      <div className="min-h-[118px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-600 shadow-sm">这是一条来自通知服务管理器的测试消息。</div>
+                      <textarea
+                        className="min-h-[132px] resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-base leading-6 text-slate-600 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+                        value={testBody}
+                        onChange={(event) => setTestBody(event.target.value)}
+                        disabled={busyAction !== null}
+                        aria-label="通知内容"
+                      />
                     </div>
                     <button
-                      className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#1769e8] px-3 text-sm font-medium text-white shadow-[0_5px_12px_rgba(23,105,232,0.2)] transition hover:bg-[#0f5fd8] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="mt-auto inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#1769e8] px-3 text-sm font-medium text-white shadow-[0_5px_12px_rgba(23,105,232,0.2)] transition hover:bg-[#0f5fd8] disabled:cursor-not-allowed disabled:opacity-60"
                       type="button"
                       onClick={() => void sendTestNotification()}
                       disabled={busyAction !== null}
@@ -545,10 +575,10 @@ function App(): ReactNode {
                         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white">
                           <Bell size={14} weight="fill" aria-hidden="true" />
                         </div>
-                        <span className="text-xs font-semibold text-slate-700">测试通知</span>
+                        <span className="max-w-[170px] truncate text-xs font-semibold text-slate-700">{testTitle || "测试通知"}</span>
                         <X className="ml-auto text-slate-400" size={13} aria-hidden="true" />
                       </div>
-                      <p className="mt-3 text-xs leading-5 text-slate-600">这是一条来自通知服务管理器的<br />测试消息。</p>
+                      <p className="mt-3 whitespace-pre-line break-words text-xs leading-5 text-slate-600">{testBody || "这是一条来自通知服务管理器的测试消息。"}</p>
                       <p className="mt-2 text-right text-[10px] text-slate-400">现在</p>
                     </div>
                   </div>
