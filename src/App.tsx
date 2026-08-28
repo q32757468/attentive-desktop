@@ -527,12 +527,12 @@ function App(): ReactNode {
                       <div className="min-h-[118px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-600 shadow-sm">这是一条来自通知服务管理器的测试消息。</div>
                     </div>
                     <button
-                      className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#1769e8] px-4 text-sm font-medium text-white shadow-[0_5px_12px_rgba(23,105,232,0.2)] transition hover:bg-[#0f5fd8] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#1769e8] px-3 text-sm font-medium text-white shadow-[0_5px_12px_rgba(23,105,232,0.2)] transition hover:bg-[#0f5fd8] disabled:cursor-not-allowed disabled:opacity-60"
                       type="button"
                       onClick={() => void sendTestNotification()}
                       disabled={busyAction !== null}
                     >
-                      {busyAction === "test" ? <CircleNotch className="animate-spin" size={18} aria-hidden="true" /> : <WindowsLogo size={18} weight="duotone" aria-hidden="true" />}
+                      {busyAction === "test" ? <CircleNotch className="animate-spin" size={16} aria-hidden="true" /> : <WindowsLogo size={16} weight="duotone" aria-hidden="true" />}
                       <span>{busyAction === "test" ? "正在提交 Toast…" : "发送 Windows Toast 测试通知"}</span>
                     </button>
                   </div>
