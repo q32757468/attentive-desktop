@@ -37,6 +37,7 @@ const DEFAULT_NOTIFIER_HOST: &str = "0.0.0.0";
 const DEFAULT_NOTIFIER_PORT: u16 = 8765;
 const DEFAULT_MAX_BODY_BYTES: usize = 1024 * 1024;
 const MAX_OPEN_URI_LENGTH: usize = 4096;
+const AUTOSTART_ARG: &str = "--from-autostart";
 #[cfg(windows)]
 const APP_USER_MODEL_ID: &str = "Attentive.Desktop";
 #[cfg(windows)]
@@ -142,6 +143,7 @@ struct OpenUriAction {
 struct CliOverrides {
     host: Option<String>,
     port: Option<u16>,
+    started_from_autostart: bool,
 }
 
 type DispatchFuture = Pin<Box<dyn Future<Output = Result<(), String>> + Send>>;
@@ -238,12 +240,14 @@ pub fn run() {
 
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main_window(app);
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if !args.iter().any(|arg| arg == AUTOSTART_ARG) {
+                show_main_window(app);
+            }
         }));
         builder = builder.plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(Vec::<&str>::new()),
+            Some(vec![AUTOSTART_ARG]),
         ));
     }
 
@@ -333,6 +337,10 @@ pub fn run() {
                     tray_builder = tray_builder.icon(icon);
                 }
                 tray_builder.build(app)?;
+
+                if !overrides.started_from_autostart {
+                    show_main_window(&app.handle());
+                }
             }
 
             tauri::async_runtime::spawn(async move {
@@ -951,6 +959,11 @@ fn parse_cli(argv: Vec<String>) -> Result<CliResult, String> {
         if token == "--help" || token == "-h" {
             return Ok(CliResult::Help);
         }
+        if token == AUTOSTART_ARG {
+            result.started_from_autostart = true;
+            index += 1;
+            continue;
+        }
 
         let (name, inline_value) = token
             .split_once('=')
@@ -1153,6 +1166,17 @@ mod tests {
 
         assert_eq!(overrides.host.as_deref(), Some("127.0.0.1"));
         assert_eq!(overrides.port, Some(0));
+    }
+
+    #[test]
+    fn recognizes_autostart_launch_argument() {
+        let CliResult::Overrides(overrides) =
+            parse_cli(vec![AUTOSTART_ARG.to_string()]).expect("valid args")
+        else {
+            panic!("expected overrides");
+        };
+
+        assert!(overrides.started_from_autostart);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
