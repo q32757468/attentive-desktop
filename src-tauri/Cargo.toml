@@ -14,13 +14,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+attentive-notifier = "0.1.1"
 axum = "0.8"
-http-body-util = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon"] }
 tokio = { version = "1", features = ["net", "sync", "rt-multi-thread"] }
-url = "2"
 uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
@@ -28,5 +27,4 @@ tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 
 [target.'cfg(windows)'.dependencies]
-winrt-toast-reborn = "0.3.8"
 windows = { version = "0.61", features = ["Win32_Storage_FileSystem"] }

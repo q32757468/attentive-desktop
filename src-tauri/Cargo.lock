@@ -211,8 +211,8 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 name = "attentive-desktop"
 version = "0.1.2"
 dependencies = [
+ "attentive-notifier",
  "axum",
- "http-body-util",
  "serde",
  "serde_json",
  "tauri",
@@ -220,9 +220,23 @@ dependencies = [
  "tauri-plugin-autostart",
  "tauri-plugin-single-instance",
  "tokio",
- "url",
  "uuid",
  "windows",
+]
+
+[[package]]
+name = "attentive-notifier"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "708246294c8ab9879d3a1b855a9853298da816d1e2b1c41ac9c904facb35a98d"
+dependencies = [
+ "axum",
+ "http-body-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
+ "uuid",
  "winrt-toast-reborn",
 ]
 
@@ -3879,6 +3893,7 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.61.2",

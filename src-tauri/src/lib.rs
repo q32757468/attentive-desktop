@@ -1,25 +1,12 @@
-use axum::{
-    body::Body,
-    extract::{Request, State},
-    http::{header, Method, StatusCode},
-    response::Response,
-    routing::any,
-    Router,
+use attentive_notifier::{
+    create_notifier_router, NotificationDispatcher, NotificationRequest, NotifierServerOptions,
+    WindowsToastDispatcher, DEFAULT_MAX_BODY_BYTES, DEFAULT_NOTIFIER_HOST, DEFAULT_NOTIFIER_PORT,
 };
-use http_body_util::BodyExt;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
-#[cfg(windows)]
-use std::process::Command;
 use std::{
-    future::Future,
     net::{IpAddr, Ipv4Addr, UdpSocket},
     path::{Path, PathBuf},
-    pin::Pin,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, RwLock,
-    },
+    sync::{Arc, RwLock},
 };
 use tauri::{async_runtime::JoinHandle, AppHandle, Manager, State as TauriState};
 #[cfg(desktop)]
@@ -31,17 +18,7 @@ use tauri::{
 use tokio::{net::TcpListener, sync::Mutex};
 use uuid::Uuid;
 
-const NOTIFICATIONS_PATH: &str = "/api/v1/notifications";
-const HEALTH_PATH: &str = "/health";
-const DEFAULT_NOTIFIER_HOST: &str = "0.0.0.0";
-const DEFAULT_NOTIFIER_PORT: u16 = 8765;
-const DEFAULT_MAX_BODY_BYTES: usize = 1024 * 1024;
-const MAX_OPEN_URI_LENGTH: usize = 4096;
 const AUTOSTART_ARG: &str = "--from-autostart";
-#[cfg(windows)]
-const APP_USER_MODEL_ID: &str = "Attentive.Desktop";
-#[cfg(windows)]
-const APP_DISPLAY_NAME: &str = "Attentive Desktop";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -106,7 +83,6 @@ struct RuntimeState {
     status: RwLock<ServerStatus>,
     server: Mutex<Option<ServerHandle>>,
     restart_lock: Mutex<()>,
-    body_limit: Arc<AtomicUsize>,
     config_warning: RwLock<Option<String>>,
     config_path: PathBuf,
 }
@@ -115,40 +91,12 @@ struct ServerHandle {
     task: JoinHandle<()>,
 }
 
-#[derive(Clone)]
-struct HttpState {
-    max_body_bytes: Arc<AtomicUsize>,
-    dispatcher: NotificationDispatcher,
-}
-
-#[derive(Debug, Clone)]
-struct NotificationRequest {
-    #[cfg_attr(not(windows), allow(dead_code))]
-    title: String,
-    #[cfg_attr(not(windows), allow(dead_code))]
-    body: String,
-    source: Option<String>,
-    #[cfg_attr(not(windows), allow(dead_code))]
-    action: Option<OpenUriAction>,
-    _metadata: Option<Map<String, Value>>,
-}
-
-#[derive(Debug, Clone)]
-struct OpenUriAction {
-    #[cfg_attr(not(windows), allow(dead_code))]
-    uri: String,
-}
-
 #[derive(Debug, Clone, Default)]
 struct CliOverrides {
     host: Option<String>,
     port: Option<u16>,
     started_from_autostart: bool,
 }
-
-type DispatchFuture = Pin<Box<dyn Future<Output = Result<(), String>> + Send>>;
-type NotificationDispatcher =
-    Arc<dyn Fn(NotificationRequest, String) -> DispatchFuture + Send + Sync>;
 
 #[tauri::command]
 async fn get_settings(
@@ -212,14 +160,11 @@ async fn test_notification(title: String, body: String) -> Result<(), String> {
         return Err("通知内容不能为空".to_string());
     }
 
-    let request = NotificationRequest {
-        title,
-        body,
-        source: Some("settings".to_string()),
-        action: None,
-        _metadata: None,
-    };
-    dispatch_notification(request, Uuid::new_v4().to_string()).await
+    let mut request = NotificationRequest::new(title, body);
+    request.source = Some("settings".to_string());
+    WindowsToastDispatcher
+        .dispatch(request, Uuid::new_v4().to_string())
+        .await
 }
 
 pub fn run() {
@@ -290,15 +235,11 @@ pub fn run() {
 
             validate_config(&config).map_err(|error| format!("配置无效: {error}"))?;
 
-            #[cfg(windows)]
-            register_toast_app();
-
             let state = Arc::new(RuntimeState {
                 status: RwLock::new(ServerStatus::offline(&config, config_warning.clone())),
                 config: RwLock::new(config.clone()),
                 server: Mutex::new(None),
                 restart_lock: Mutex::new(()),
-                body_limit: Arc::new(AtomicUsize::new(config.max_body_bytes)),
                 config_warning: RwLock::new(config_warning),
                 config_path,
             });
@@ -393,7 +334,7 @@ async fn restart_server(state: &Arc<RuntimeState>, config: AppConfig) -> Result<
 
     let _restart_guard = state.restart_lock.lock().await;
 
-    let can_reuse_listener = {
+    let (same_listener, can_reuse_listener) = {
         let current_config = state
             .config
             .read()
@@ -402,16 +343,17 @@ async fn restart_server(state: &Arc<RuntimeState>, config: AppConfig) -> Result<
             .status
             .read()
             .map_err(|_| "状态锁不可用".to_string())?;
-        status.running
+        let same_listener = status.running
             && config.port != 0
             && current_config.host == config.host
-            && current_config.port == config.port
+            && current_config.port == config.port;
+        (
+            same_listener,
+            same_listener && current_config.max_body_bytes == config.max_body_bytes,
+        )
     };
 
     if can_reuse_listener {
-        state
-            .body_limit
-            .store(config.max_body_bytes, Ordering::Relaxed);
         update_config(state, &config)?;
         let warning = current_config_warning(state);
         let mut status = state
@@ -425,14 +367,18 @@ async fn restart_server(state: &Arc<RuntimeState>, config: AppConfig) -> Result<
         return Ok(());
     }
 
-    // Bind the replacement before touching the current server. A failed bind
-    // must leave the existing notifier available for the caller.
-    let listener = TcpListener::bind(bind_address(&config.host, config.port))
-        .await
-        .map_err(|error| format!("无法监听 {}:{}: {error}", config.host, config.port))?;
-    let local_address = listener
-        .local_addr()
-        .map_err(|error| format!("无法读取服务地址: {error}"))?;
+    // Keep the current notifier available when a new address cannot be bound.
+    // If only the body limit changed, the current listener must be stopped
+    // before the replacement router can bind the same address.
+    let listener = if same_listener {
+        None
+    } else {
+        Some(
+            TcpListener::bind(bind_address(&config.host, config.port))
+                .await
+                .map_err(|error| format!("无法监听 {}:{}: {error}", config.host, config.port))?,
+        )
+    };
 
     let old_server = {
         let mut server = state.server.lock().await;
@@ -440,15 +386,27 @@ async fn restart_server(state: &Arc<RuntimeState>, config: AppConfig) -> Result<
     };
     if let Some(old_server) = old_server {
         old_server.task.abort();
+        let _ = old_server.task.await;
     }
 
-    state
-        .body_limit
-        .store(config.max_body_bytes, Ordering::Relaxed);
-    let router = build_router(HttpState {
-        max_body_bytes: Arc::clone(&state.body_limit),
-        dispatcher: default_dispatcher(),
-    });
+    let listener = match listener {
+        Some(listener) => listener,
+        None => match TcpListener::bind(bind_address(&config.host, config.port)).await {
+            Ok(listener) => listener,
+            Err(error) => {
+                let message = format!("无法监听 {}:{}: {error}", config.host, config.port);
+                set_runtime_error(state, message.clone());
+                return Err(message);
+            }
+        },
+    };
+    let local_address = listener
+        .local_addr()
+        .map_err(|error| format!("无法读取服务地址: {error}"))?;
+
+    let router = create_notifier_router(
+        NotifierServerOptions::default().with_max_body_bytes(config.max_body_bytes),
+    );
     let status_state = Arc::clone(state);
     let task = tauri::async_runtime::spawn(async move {
         if let Err(error) = axum::serve(listener, router).await {
@@ -482,18 +440,6 @@ async fn restart_server(state: &Arc<RuntimeState>, config: AppConfig) -> Result<
     }
 
     Ok(())
-}
-
-fn build_router(state: HttpState) -> Router {
-    Router::new()
-        .route(HEALTH_PATH, any(handle_health))
-        .route(NOTIFICATIONS_PATH, any(handle_notifications))
-        .fallback(handle_not_found)
-        .with_state(state)
-}
-
-fn default_dispatcher() -> NotificationDispatcher {
-    Arc::new(|request, notification_id| Box::pin(dispatch_notification(request, notification_id)))
 }
 
 fn update_config(state: &Arc<RuntimeState>, config: &AppConfig) -> Result<(), String> {
@@ -541,242 +487,6 @@ fn set_runtime_error(state: &Arc<RuntimeState>, error: String) {
     }
 }
 
-async fn handle_health(request: Request) -> Response {
-    if request.method() != Method::GET {
-        return method_not_allowed();
-    }
-    json_response(StatusCode::OK, json!({ "status": "ok" }))
-}
-
-async fn handle_notifications(State(state): State<HttpState>, request: Request) -> Response {
-    if request.method() != Method::POST {
-        return method_not_allowed();
-    }
-
-    let max_body_bytes = state.max_body_bytes.load(Ordering::Relaxed);
-    let body = match read_body(request.into_body(), max_body_bytes).await {
-        Ok(body) => body,
-        Err(error) => {
-            return json_response(error.status, api_error("INVALID_REQUEST", error.message))
-        }
-    };
-
-    let value = match serde_json::from_slice::<Value>(&body) {
-        Ok(value) => value,
-        Err(_) => {
-            return json_response(
-                StatusCode::BAD_REQUEST,
-                api_error("INVALID_REQUEST", "request body must be valid JSON"),
-            )
-        }
-    };
-    let notification = match validate_notification_request(value) {
-        Ok(notification) => notification,
-        Err(message) => {
-            return json_response(
-                StatusCode::BAD_REQUEST,
-                api_error("INVALID_REQUEST", message),
-            )
-        }
-    };
-
-    let notification_id = Uuid::new_v4().to_string();
-    if let Err(error) = (state.dispatcher)(notification.clone(), notification_id.clone()).await {
-        eprintln!(
-            "Unable to submit notification: notificationId={notification_id} source={:?} error={error}",
-            notification.source
-        );
-        return json_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            api_error("INTERNAL_ERROR", "unable to submit notification"),
-        );
-    }
-
-    println!(
-        "Notification submitted: notificationId={notification_id}{}",
-        notification
-            .source
-            .as_ref()
-            .map(|source| format!(" source={source}"))
-            .unwrap_or_default()
-    );
-    json_response(
-        StatusCode::CREATED,
-        json!({ "notificationId": notification_id }),
-    )
-}
-
-async fn handle_not_found(_request: Request) -> Response {
-    json_response(
-        StatusCode::NOT_FOUND,
-        api_error("NOT_FOUND", "route not found"),
-    )
-}
-
-async fn read_body(mut body: Body, max_body_bytes: usize) -> Result<Vec<u8>, RequestBodyError> {
-    let mut chunks = Vec::new();
-    let mut byte_length = 0usize;
-
-    while let Some(frame) = body.frame().await {
-        let frame = frame.map_err(|_| RequestBodyError::bad_request())?;
-        let Ok(data) = frame.into_data() else {
-            continue;
-        };
-        byte_length = byte_length.saturating_add(data.len());
-        if byte_length > max_body_bytes {
-            return Err(RequestBodyError::too_large());
-        }
-        chunks.extend_from_slice(&data);
-    }
-
-    if chunks.is_empty() {
-        return Err(RequestBodyError::bad_request());
-    }
-    Ok(chunks)
-}
-
-async fn dispatch_notification(
-    request: NotificationRequest,
-    _notification_id: String,
-) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        tauri::async_runtime::spawn_blocking(move || show_windows_toast(request))
-            .await
-            .map_err(|error| format!("Windows notification worker failed: {error}"))??;
-        return Ok(());
-    }
-
-    #[cfg(not(windows))]
-    {
-        let _ = request;
-        Err("Windows notifications require a Windows notifier host".to_string())
-    }
-}
-
-#[cfg(windows)]
-fn register_toast_app() {
-    let _ = winrt_toast_reborn::register(APP_USER_MODEL_ID, APP_DISPLAY_NAME, None);
-}
-
-#[cfg(windows)]
-fn show_windows_toast(request: NotificationRequest) -> Result<(), String> {
-    use std::sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    };
-    use winrt_toast_reborn::{Toast, ToastManager};
-
-    let mut toast = Toast::new();
-    toast.text1(request.title).text2(request.body);
-
-    let opened = Arc::new(AtomicBool::new(false));
-    let action_uri = request.action.map(|action| action.uri);
-    if let Some(uri) = action_uri.as_deref() {
-        toast.launch(uri);
-    }
-    let opened_on_activation = Arc::clone(&opened);
-    let manager = ToastManager::new(APP_USER_MODEL_ID).on_activated(None, move |_action| {
-        if let Some(uri) = action_uri.as_deref() {
-            if !opened_on_activation.swap(true, Ordering::SeqCst) {
-                let _ = open_uri_with_explorer(uri);
-            }
-        }
-    });
-
-    manager
-        .show(&toast)
-        .map_err(|error| format!("Windows toast submission failed: {error}"))
-}
-
-#[cfg(windows)]
-fn open_uri_with_explorer(uri: &str) -> Result<(), String> {
-    Command::new("explorer.exe")
-        .arg(uri)
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("unable to open notification action: {error}"))
-}
-
-fn validate_notification_request(value: Value) -> Result<NotificationRequest, String> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| "request body must be a JSON object".to_string())?;
-    let title = require_non_empty_string(object.get("title"), "title")?;
-    let body = require_non_empty_string(object.get("body"), "body")?;
-
-    if object.contains_key("url") {
-        return Err("url is no longer supported; use action".to_string());
-    }
-
-    let source = object
-        .get("source")
-        .map(|value| require_string(Some(value), "source"))
-        .transpose()?;
-
-    let action = object.get("action").map(validate_action).transpose()?;
-
-    let metadata = object
-        .get("metadata")
-        .map(|value| {
-            value
-                .as_object()
-                .cloned()
-                .ok_or_else(|| "metadata must be a JSON object".to_string())
-        })
-        .transpose()?;
-
-    Ok(NotificationRequest {
-        title,
-        body,
-        source,
-        action,
-        _metadata: metadata,
-    })
-}
-
-fn validate_action(value: &Value) -> Result<OpenUriAction, String> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| "action must be a JSON object".to_string())?;
-    if object.get("type") != Some(&Value::String("open-uri".to_string())) {
-        return Err("action.type must be \"open-uri\"".to_string());
-    }
-    let uri = require_string(object.get("uri"), "action.uri")?;
-    if !is_open_uri(&uri) {
-        return Err(format!(
-            "action.uri must use http, https, or vscode and be at most {MAX_OPEN_URI_LENGTH} characters"
-        ));
-    }
-    Ok(OpenUriAction { uri })
-}
-
-fn require_non_empty_string(value: Option<&Value>, field: &str) -> Result<String, String> {
-    let result = require_string(value, field)?;
-    if result.trim().is_empty() {
-        return Err(format!("{field} is required"));
-    }
-    Ok(result)
-}
-
-fn require_string(value: Option<&Value>, field: &str) -> Result<String, String> {
-    match value {
-        None => Err(format!("{field} is required")),
-        Some(Value::String(value)) => Ok(value.clone()),
-        Some(_) => Err(format!("{field} must be a string")),
-    }
-}
-
-fn is_open_uri(value: &str) -> bool {
-    if value.is_empty() || value.encode_utf16().count() > MAX_OPEN_URI_LENGTH {
-        return false;
-    }
-    let Ok(uri) = url::Url::parse(value) else {
-        return false;
-    };
-    matches!(uri.scheme(), "http" | "https" | "vscode")
-}
-
 fn validate_config(config: &AppConfig) -> Result<(), String> {
     if config.host.trim().is_empty() {
         return Err("监听地址不能为空".to_string());
@@ -785,27 +495,6 @@ fn validate_config(config: &AppConfig) -> Result<(), String> {
         return Err("请求体上限必须大于 0".to_string());
     }
     Ok(())
-}
-
-fn api_error(code: &str, message: impl Into<String>) -> Value {
-    json!({ "error": { "code": code, "message": message.into() } })
-}
-
-fn method_not_allowed() -> Response {
-    json_response(
-        StatusCode::METHOD_NOT_ALLOWED,
-        api_error("METHOD_NOT_ALLOWED", "method not allowed"),
-    )
-}
-
-fn json_response(status: StatusCode, payload: Value) -> Response {
-    let body = serde_json::to_vec(&payload).unwrap_or_else(|_| b"{}".to_vec());
-    Response::builder()
-        .status(status)
-        .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
-        .header(header::CONTENT_LENGTH, body.len())
-        .body(Body::from(body))
-        .expect("valid JSON response headers")
 }
 
 fn load_config(path: &Path) -> (AppConfig, Option<String>) {
@@ -1081,31 +770,11 @@ fn default_max_body_bytes() -> usize {
     DEFAULT_MAX_BODY_BYTES
 }
 
-#[derive(Debug)]
-struct RequestBodyError {
-    status: StatusCode,
-    message: &'static str,
-}
-
-impl RequestBodyError {
-    fn bad_request() -> Self {
-        Self {
-            status: StatusCode::BAD_REQUEST,
-            message: "request body must be valid JSON",
-        }
-    }
-
-    fn too_large() -> Self {
-        Self {
-            status: StatusCode::PAYLOAD_TOO_LARGE,
-            message: "request body is too large",
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use attentive_notifier::{validate_notification_request, HEALTH_PATH, NOTIFICATIONS_PATH};
+    use serde_json::{json, Value};
     use std::{
         io::{Read, Write},
         net::{SocketAddr, TcpStream},
@@ -1139,7 +808,9 @@ mod tests {
     #[test]
     fn keeps_protocol_validation_messages_stable() {
         assert_eq!(
-            validate_notification_request(json!({ "title": "Missing body" })).unwrap_err(),
+            validate_notification_request(json!({ "title": "Missing body" }))
+                .unwrap_err()
+                .message,
             "body is required"
         );
         assert_eq!(
@@ -1148,7 +819,8 @@ mod tests {
                 "body": "Done",
                 "url": "https://example.com"
             }))
-            .unwrap_err(),
+            .unwrap_err()
+            .message,
             "url is no longer supported; use action"
         );
     }
@@ -1183,17 +855,17 @@ mod tests {
     async fn serves_the_notifier_http_protocol() {
         let submitted = Arc::new(StdMutex::new(Vec::<(NotificationRequest, String)>::new()));
         let submitted_for_dispatch = Arc::clone(&submitted);
-        let dispatcher: NotificationDispatcher = Arc::new(move |request, notification_id| {
-            let submitted = Arc::clone(&submitted_for_dispatch);
-            Box::pin(async move {
+        let options = NotifierServerOptions::default().with_sync_dispatcher(
+            move |request, notification_id| {
+                let submitted = Arc::clone(&submitted_for_dispatch);
                 submitted
                     .lock()
                     .expect("dispatcher capture lock")
                     .push((request, notification_id));
                 Ok(())
-            })
-        });
-        let (address, task) = start_test_server(DEFAULT_MAX_BODY_BYTES, dispatcher).await;
+            },
+        );
+        let (address, task) = start_test_server(options).await;
 
         let (status, payload) = raw_http_request(
             address,
@@ -1228,10 +900,12 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn returns_payload_too_large_and_dispatcher_errors() {
-        let dispatcher: NotificationDispatcher = Arc::new(|_request, _notification_id| {
-            Box::pin(async { Err("synthetic dispatcher failure".to_string()) })
-        });
-        let (address, task) = start_test_server(64, dispatcher).await;
+        let options = NotifierServerOptions::default()
+            .with_max_body_bytes(64)
+            .with_sync_dispatcher(|_request, _notification_id| {
+                Err("synthetic dispatcher failure".to_string())
+            });
+        let (address, task) = start_test_server(options).await;
 
         let (status, payload) = raw_http_request(
             address,
@@ -1257,18 +931,13 @@ mod tests {
     }
 
     async fn start_test_server(
-        max_body_bytes: usize,
-        dispatcher: NotificationDispatcher,
+        options: NotifierServerOptions,
     ) -> (SocketAddr, tokio::task::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .expect("test listener");
         let address = listener.local_addr().expect("test listener address");
-        let state = HttpState {
-            max_body_bytes: Arc::new(AtomicUsize::new(max_body_bytes)),
-            dispatcher,
-        };
-        let router = build_router(state);
+        let router = create_notifier_router(options);
         let task = tokio::spawn(async move {
             let _ = axum::serve(listener, router).await;
         });

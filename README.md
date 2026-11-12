@@ -1,6 +1,6 @@
 # Attentive Desktop
 
-一个基于 Tauri 的 Windows notifier 桌面应用。它复刻了 `@attentive-kit/notifier` 的 HTTP 协议：
+一个基于 Tauri 的 Windows notifier 桌面应用。HTTP 服务和 Windows Toast 通知由 Rust crate `attentive-notifier` 提供：
 
 - `GET /health` 返回 `{ "status": "ok" }`
 - `POST /api/v1/notifications` 接收 `title`、`body`、可选 `source`、`action` 和 `metadata`
